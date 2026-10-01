@@ -1,0 +1,26 @@
+# Dependencies
+node_modules/
+out/
+release/
+dist/
+*.log
+debug.log
+*.tsbuildinfo
+
+# Electron
+.electron-vite/
+
+# IDE
+.idea/
+*.iml
+*.ipr
+*.iws
+.vscode/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# virtual machine crash logs
+hs_err_pid*
+replay_pid*

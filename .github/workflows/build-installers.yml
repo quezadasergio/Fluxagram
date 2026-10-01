@@ -1,0 +1,97 @@
+name: Build installers
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: build-installers-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            platform: mac
+            artifact: Fluxagram-mac
+          - os: windows-latest
+            platform: win
+            artifact: Fluxagram-windows
+          - os: ubuntu-latest
+            platform: linux
+            artifact: Fluxagram-linux
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Build app (electron-vite)
+        run: npm run build
+
+      - name: Package macOS (.dmg)
+        if: matrix.platform == 'mac'
+        # Ad-hoc sign (identity "-") so Gatekeeper shows "unverified"
+        # instead of the unrecoverable "app is damaged" on Apple Silicon.
+        run: npx electron-builder --mac dmg --arm64 --x64 --publish never
+
+      - name: Package Windows (NSIS)
+        if: matrix.platform == 'win'
+        run: npx electron-builder --win nsis --publish never
+
+      - name: Package Linux (AppImage)
+        if: matrix.platform == 'linux'
+        run: npx electron-builder --linux AppImage --x64 --publish never
+
+      - name: Upload installer artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: |
+            release/*.dmg
+            release/*.exe
+            release/*.AppImage
+            release/*.blockmap
+            release/latest*.yml
+          if-no-files-found: error
+
+  release:
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist-installers
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          draft: false
+          generate_release_notes: true
+          files: |
+            dist-installers/**/*.dmg
+            dist-installers/**/*.exe
+            dist-installers/**/*.AppImage
